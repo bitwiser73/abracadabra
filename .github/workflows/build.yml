@@ -14,7 +14,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
       - name: Configure CMake
         run: cmake -S . -B build -A win32
@@ -24,21 +24,34 @@ jobs:
 
       - name: Create Release
         id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
-          draft: false
-          prerelease: false
+        shell: pwsh
+        run: |
+          $headers = @{
+            Authorization = "token ${{ secrets.GITHUB_TOKEN }}"
+            Accept = "application/vnd.github.v3+json"
+          }
+          $body = @{
+            tag_name = "${{ github.ref_name }}"
+            target_commitish = "main"
+            name = "Release ${{ github.ref_name }}"
+            body = "Release notes"
+            draft = $false
+            prerelease = $false
+          } | ConvertTo-Json
+          Invoke-RestMethod -Uri "https://api.github.com/repos/${{ github.repository }}/releases" -Method Post -Headers $headers -Body $body
 
       - name: Upload Release Asset
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./build/MinSizeRel/abracadabra.exe
-          asset_name: abracadabra.exe
-          asset_content_type: application/octet-stream
+        shell: pwsh
+        run: |
+          $headers = @{
+            Authorization = "token ${{ secrets.GITHUB_TOKEN }}"
+            Accept = "application/vnd.github.v3+json"
+          }
+          $release = Invoke-RestMethod -Uri "https://api.github.com/repos/${{ github.repository }}/releases/tags/${{ github.ref_name }}" -Method Get -Headers $headers
+          $release_id = $release.id
+          $asset_headers = @{
+            Authorization = "token ${{ secrets.GITHUB_TOKEN }}"
+            "Content-Type" = "application/octet-stream"
+          }
+          Invoke-RestMethod -Uri "https://uploads.github.com/repos/${{ github.repository }}/releases/$release_id/assets?name=abracadabra.exe" -Method Post -Headers $asset_headers -InFile "./build/MinSizeRel/abracadabra.exe"
+
